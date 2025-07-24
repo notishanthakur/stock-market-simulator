@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Tick Stream</title>
+            <style>
+                body {
+                font-family: sans-serif;
+                padding: 2rem;
+                background: #f5f5f5;
+                }
+                h1 {
+                color: #333;
+                }
+                #tick-container {
+                margin-top: 1rem;
+                padding: 1rem;
+                background: #fff;
+                border-radius: 5px;
+                box-shadow: 0 0 5px rgba(0,0,0,0.1);
+                }
+                .tick {
+                padding: 0.5rem;
+                border-bottom: 1px solid #eee;
+                }
+            </style>
+        </head>
+    <body>
+    <h1>Live Tick Stream</h1>
+    <div id="tick-container"></div>
+
+        <script>
+            const container = document.getElementById("tick-container");
+            const socket = new WebSocket("ws://localhost:8000/ws/ticks");
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                data.forEach(tick => {
+                const div = document.createElement("div");
+                div.className = "tick";
+                const time = new Date(tick.timestamp * 1000).toLocaleTimeString(); 
+                div.textContent = `Symbol: ${tick.symbol}, Price: ₹${tick.price}, Time: ${time}`;
+                container.prepend(div);
+                });
+            };
+
+            socket.onopen = () => console.log("Connected to WebSocket.");
+            socket.onerror = (err) => console.error("WebSocket error", err);
+            socket.onclose = () => console.log("WebSocket closed.");
+
+            if (container.children.length > 100) {
+                container.removeChild(container.lastChild);
+            }
+
+        </script>
+
+    </body>
+</html>
