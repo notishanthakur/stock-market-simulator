@@ -1,26 +1,23 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from tick_simulator import generate_ticks, generate_candlesticks
 import uvicorn
-from tick_simulator import generate_ticks
-from buffer import tick_buffer
-import asyncio
 
 app = FastAPI()
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(generate_ticks())
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-async def root():
-    return {"message": "Tick server is running."}
-
-@app.websocket("/ws/ticks")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        ticks = tick_buffer.get_ticks()
-        await websocket.send_json(ticks)
-        await asyncio.sleep(1)
+@app.get("/candles")
+def get_candles():
+    ticks = generate_ticks(100)
+    candles = generate_candlesticks(ticks)
+    return candles
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
