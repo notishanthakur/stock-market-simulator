@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from tick_simulator import generate_ticks, generate_candlesticks
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from .tick_simulator import generate_ticks, generate_candlesticks
 import uvicorn
 
 app = FastAPI()
@@ -13,9 +15,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/candles")
-def get_candles():
-    ticks = generate_ticks(100)
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+def get_index():
+    return FileResponse("frontend/index.html")
+
+base_prices = {
+    "BHEL": 250.0
+}
+
+@app.get("/latest-candle/{symbol}")
+def get_latest_candle(symbol: str):
+    symbol = symbol.upper()
+    if symbol not in base_prices:
+        return {"error": "Unknown stock symbol"}
+    ticks = generate_ticks(5, base_price=base_prices[symbol])
+    candles = generate_candlesticks(ticks)
+    if candles:
+        return candles[-1]
+    return {}
+
+
+@app.get("/candles/{symbol}")
+def get_candles(symbol: str):
+    symbol = symbol.upper()
+    if symbol not in base_prices:
+        return {"error": "Unknown stock symbol"}
+    ticks = generate_ticks(100, base_price=base_prices[symbol])
     candles = generate_candlesticks(ticks)
     return candles
 

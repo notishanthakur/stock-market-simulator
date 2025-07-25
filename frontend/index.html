@@ -1,113 +1,205 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Candlestick Chart</title>
-    <style>
-      body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        background: #111;
-        color: #fff;
-      }
-      #chart-container {
-        width: 100%;
-        height: 100vh;
-        padding: 20px;
-        box-sizing: border-box;
-      }
-      canvas {
-        background: #222;
-        border: 1px solid #444;
-        border-radius: 10px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="chart-container">
-      <canvas id="candlestickChart"></canvas>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-    <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
-    <script>
-      const ctx = document.getElementById('candlestickChart').getContext('2d');
-      const candlestickChart = new Chart(ctx, {
-        type: 'candlestick',
-        data: {
-          datasets: [{
-            label: 'Random Candle',
-            data: [],
-            borderColor: '#fff',
-            color: {
-              up: '#0f0',
-              down: '#f00',
-              unchanged: '#888'
-            },
-            barThickness: 4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              type: 'time',
-              time: {
-                unit: 'second',
-                displayFormats: {
-                  second: 'HH:mm:ss'
+    <head>
+        <meta charset="UTF-8">
+        <title>Stock Market Simulator</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+        <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+        <style>
+            body {
+                background: #0f172a;
+                color: #f1f5f9;
+                font-family: sans-serif;
+                padding: 1rem;
+            }
+            canvas {
+                max-width: 100%;
+                background: #1e293b;
+                border-radius: 10px;
+                padding: 1rem;
+            }
+            .info {
+                margin-top: 1rem;
+            }
+            .info span {
+                margin-right: 1rem;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>BHEL Live Candlestick Chart</h2>
+        <canvas id="chart" height="100"></canvas>
+        <div class="info">
+            <span id="max">Max: </span>
+            <span id="min">Min: </span>
+            <span id="ma">MA: </span>
+        </div>
+
+        <script>
+            const ctx = document.getElementById("chart").getContext("2d");
+
+            const maxPoints = 60;
+            const maPeriod = 5;
+            const currentStock = "BHEL";
+
+            const candleDataset = {
+                label: "BHEL",
+                data: [],
+                borderColor: "#00f6ff",
+                color: {
+                    up: "#16a34a",
+                    down: "#dc2626",
+                    unchanged: "#cbd5e1"
                 }
-              },
-              ticks: {
-                color: '#ccc'
-              },
-              grid: {
-                color: '#333'
+            };
+
+            const maDataset = {
+                label: "Moving Average",
+                data: [],
+                borderColor: "#3b82f6",
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false,
+                tension: 0.2,
+                yAxisID: 'y'
+            };
+
+            const config = {
+                type: 'candlestick',
+                data: {
+                    datasets: [
+                        { ...candleDataset, type: "candlestick" },
+                        { ...maDataset, type: "line" }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            type: "time",
+                            offset: false,
+                            time: {
+                                unit: "second",
+                                tooltipFormat: "HH:mm:ss",
+                                displayFormats: {
+                                    second: "HH:mm:ss"
+                                }
+                            },
+                            ticks: {
+                                color: "#cbd5e1"
+                            },
+                            adapters: {
+                                date: luxon.DateTime
+                            },
+                            min: () => {
+                                const data = candleDataset.data;
+                                return data.length ? data[0].x : undefined;
+                            },
+                            max: () => {
+                                const data = candleDataset.data;
+                                return data.length ? data[data.length - 1].x + 1000 : undefined;
+                            }
+                          },
+                        y: {
+                            position: 'left',
+                            ticks: {
+                              color: "#cbd5e1"
+                            }
+                          }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                        color: "#f1f5f9"
+                                    }
+                                }
+                            }
+                      }
+            };
+
+              const candlestickChart = new Chart(ctx, config);
+
+              async function fetchLatestCandle(symbol) {
+                  try {
+                      const res = await fetch(`/latest-candle/${symbol}`);
+                      const json = await res.json();
+                      if (!json || !json.time) return null;
+
+                      return {
+                        x: json.time * 1000,
+                        o: json.open,
+                        h: json.high,
+                        l: json.low,
+                        c: json.close
+                      };
+                  } catch (err) {
+                      console.error("Failed to fetch candle:", err);
+                      return null;
+                  }
               }
-            },
-            y: {
-              ticks: {
-                color: '#ccc'
-              },
-              grid: {
-                color: '#333'
+
+              function computeAnalytics(data) {
+                  if (!data.length) return;
+                  const highs = data.map(d => d.h);
+                  const lows = data.map(d => d.l);
+                  const closes = data.map(d => d.c);
+                  const max = Math.max(...highs);
+                  const min = Math.min(...lows);
+                  const ma = closes.slice(-maPeriod).reduce((a, b) => a + b, 0) / Math.min(maPeriod, closes.length);
+                  document.getElementById("max").textContent = `Max: ${max.toFixed(2)}`;
+                  document.getElementById("min").textContent = `Min: ${min.toFixed(2)}`;
+                  document.getElementById("ma").textContent = `MA: ${ma.toFixed(2)}`;
               }
-            }
-          },
-          plugins: {
-            legend: {
-              display: false
-            }
-          }
-        }
-      });
 
-      function generateRandomCandle(prevClose) {
-        const time = new Date();
-        const open = prevClose;
-        const close = open + (Math.random() - 0.5) * 2;
-        const high = Math.max(open, close) + Math.random();
-        const low = Math.min(open, close) - Math.random();
+              function updateMA(data) {
+                const closes = data.map(d => d.c);
+                maDataset.data.length = 0;
+                data.forEach((d, i) => {
+                  if (i < maPeriod - 1) {
+                    maDataset.data.push({ x: d.x, y: null });
+                  } else {
+                    const avg = closes.slice(i - maPeriod + 1, i + 1).reduce((a, b) => a + b, 0) / maPeriod;
+                    maDataset.data.push({ x: d.x, y: avg });
+                  }
+                });
+              }
 
-        return { x: time, o: open, h: high, l: low, c: close };
-      }
+              async function updateChart() {
+                  const newCandle = await fetchLatestCandle(currentStock);
+                  if (!newCandle) return;
 
-      let prevClose = 100;
+                  candleDataset.data.push(newCandle);
+                  if (candleDataset.data.length > maxPoints) {
+                    candleDataset.data.shift();
+                  }
 
-      setInterval(() => {
-        const newCandle = generateRandomCandle(prevClose);
-        candlestickChart.data.datasets[0].data.push(newCandle);
-        prevClose = newCandle.c;
+                  computeAnalytics(candleDataset.data);
+                  updateMA(candleDataset.data);
+                  candlestickChart.update();
+              }
 
-        if (candlestickChart.data.datasets[0].data.length > 60) {
-          candlestickChart.data.datasets[0].data.shift();
-        }
+              (async function init() {
+                let first = null;
+                for (let i = 0; i < 5; i++) {
+                    first = await fetchLatestCandle(currentStock);
+                    if (first) break;
+                    await new Promise(r => setTimeout(r, 500));
+                } 
 
-        candlestickChart.update();
-      }, 1000);
-    </script>
-  </body>
+                if (!first) {
+                    console.error("Failed to load initial candle. Aborting.");
+                    return;
+                }
+
+                candleDataset.data.push(first);
+                computeAnalytics(candleDataset.data);
+                updateMA(candleDataset.data);
+                candlestickChart.update();
+
+                setInterval(updateChart, 1000);
+            })();
+        </script>
+    </body>
 </html>
